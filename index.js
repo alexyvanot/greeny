@@ -6,11 +6,11 @@ import random from "random";
 // ========== CONFIGURATION ==========
 const CONFIG = {
   // Number of commits to generate
-  numberOfCommits: 300,
+  numberOfCommits: 500,
   
   // Commit generation period
   startDate: {
-    years: 1,    // How many years ago to start
+    years: 2,    // How many years ago to start
     months: 0,   // Additional months
     days: 1      // Additional days (recommended: 1 to avoid timezone issues)
   },
@@ -20,19 +20,19 @@ const CONFIG = {
     days: 0      // 0 = today, 1 = tomorrow, etc. (recommended: 0)
   },
   
-  // Weekend settings (pour un rendu plus réaliste)
+  // Weekend settings (for more realistic rendering)
   weekends: {
-    exclude: true,           // Exclure les weekends généralement
-    rareCommitChance: 5      // % de chance de commit le weekend (0-100)
+    exclude: true,           // Exclude weekends generally
+    rareCommitChance: 5      // % chance to commit on weekends (0-100)
   },
   
-  // Intensité des commits par jour (pour varier le vert)
+  // Commit intensity per day (to vary the green)
   dailyIntensity: {
-    min: 1,                  // Minimum de commits par jour sélectionné
-    max: 8,                  // Maximum de commits par jour sélectionné
-    lightDays: 60,           // % de jours avec peu de commits (1-3)
-    mediumDays: 30,          // % de jours avec commits moyens (4-6)
-    heavyDays: 10            // % de jours avec beaucoup de commits (7-8+)
+    min: 1,                  // Minimum commits per selected day
+    max: 8,                  // Maximum commits per selected day
+    lightDays: 60,           // % of days with few commits (1-3)
+    mediumDays: 30,          // % of days with medium commits (4-6)
+    heavyDays: 10            // % of days with many commits (7-8+)
   },
   
   // JSON data file to be used for modifications
@@ -42,78 +42,61 @@ const CONFIG = {
 
 const path = CONFIG.dataFile;
 
-// Fonction pour vérifier si c'est un weekend
+// Function to check if it's a weekend
 const isWeekend = (date) => {
   const dayOfWeek = moment(date).day();
-  return dayOfWeek === 0 || dayOfWeek === 6; // 0 = dimanche, 6 = samedi
+  return dayOfWeek === 0 || dayOfWeek === 6; // 0 = Sunday, 6 = Saturday
 };
 
-// Fonction pour déterminer l'intensité des commits pour un jour
+// Function to determine the commit intensity for a day
 const getDailyCommitCount = () => {
   const rand = random.int(1, 100);
   
   if (rand <= CONFIG.dailyIntensity.lightDays) {
-    // Jour léger : 1-3 commits
+    // Light day: 1-3 commits
     return random.int(CONFIG.dailyIntensity.min, Math.min(3, CONFIG.dailyIntensity.max));
   } else if (rand <= CONFIG.dailyIntensity.lightDays + CONFIG.dailyIntensity.mediumDays) {
-    // Jour moyen : 4-6 commits
+    // Medium day: 4-6 commits
     return random.int(4, Math.min(6, CONFIG.dailyIntensity.max));
   } else {
-    // Jour intense : 7+ commits
+    // Heavy day: 7+ commits
     return random.int(7, CONFIG.dailyIntensity.max);
   }
 };
 
-// Fonction pour générer une date valide (excluant weekends si configuré)
+// Function to generate a valid date (excluding weekends if configured)
 const generateValidDate = (startDate, maxDate) => {
   let attempts = 0;
-  const maxAttempts = 100; // Éviter boucle infinie
+  const maxAttempts = 100; // Avoid infinite loop
   
   while (attempts < maxAttempts) {
     const totalDays = maxDate.diff(startDate, 'days');
     const randomDays = random.int(0, totalDays);
     const date = moment(startDate).add(randomDays, 'days');
     
-    // Si les weekends ne sont pas exclus, retourner la date
+    // If weekends are not excluded, return the
     if (!CONFIG.weekends.exclude) {
       return date;
     }
     
-    // Si c'est un weekend, vérifier la chance rare
+    // If it's a weekend, check for rare commit chance
     if (isWeekend(date)) {
       const chanceRoll = random.int(1, 100);
       if (chanceRoll <= CONFIG.weekends.rareCommitChance) {
-        return date; // Commit rare le weekend
+      return date; // Rare commit on weekend
       }
     } else {
-      return date; // Jour de semaine, OK
+      return date; // Weekday, OK
     }
-    
     attempts++;
   }
   
-  // Fallback : retourner une date de semaine aléatoire
+  // Fallback: return a random weekday date
   const totalDays = maxDate.diff(startDate, 'days');
   const randomDays = random.int(0, totalDays);
   return moment(startDate).add(randomDays, 'days');
 };
 
-const markCommit = (x, y) => {
-  const date = moment()
-    .subtract(1, "y")
-    .add(1, "d")
-    .add(x, "w")
-    .add(y, "d")
-    .format();
-
-  const data = {
-    date: date,
-  };
-
-  jsonfile.writeFile(path, data, () => {
-    simpleGit().add([path]).commit(date, { "--date": date }).push();
-  });
-};
 
 const makeCommits = (n) => {
   if(n===0) return simpleGit().push();
@@ -125,19 +108,44 @@ const makeCommits = (n) => {
   
   const maxDate = moment().add(CONFIG.maxFutureDate.days, "d");
   
-  const totalDays = maxDate.diff(startDate, 'days');
+  // Générer une date valide (respectant les weekends) valid date (respecting weekends)
+  const selectedDate = generateValidDate(moment(startDate), moment(maxDate));
   
-  const randomDays = random.int(0, totalDays);
+  // Determine the intensity for this day
+  const commitsForDay = getDailyCommitCount();
   
-  const date = startDate.add(randomDays, 'days').format();
+  // Generate multiple commits for this day (with different times)
+  let commitsCompleted = 0;
+  const makeMultipleCommits = () => {
+    if (commitsCompleted >= commitsForDay || n <= 0) {
+      // Move to the next day
+      return makeCommits(n);
+    }
+    
+    // Add a random hour variation in the day
+    const hourVariation = random.int(0, 23);
+    const minuteVariation = random.int(0, 59);
+    const dateWithTime = moment(selectedDate)
+      .hour(hourVariation)
+      .minute(minuteVariation)
+      .format();
 
-  const data = {
-    date: date,
+    const data = {
+      date: dateWithTime,
+    };
+    
+    console.log(`Commit ${commitsCompleted + 1}/${commitsForDay} for ${selectedDate.format('YYYY-MM-DD')} - ${dateWithTime}`);
+    
+    jsonfile.writeFile(path, data, () => {
+      simpleGit().add([path]).commit(dateWithTime, { "--date": dateWithTime }, () => {
+        commitsCompleted++;
+        n--;
+        makeMultipleCommits();
+      });
+    });
   };
-  console.log(date);
-  jsonfile.writeFile(path, data, () => {
-    simpleGit().add([path]).commit(date, { "--date": date },makeCommits.bind(this,--n));
-  });
+  
+  makeMultipleCommits();
 };
 
 makeCommits(CONFIG.numberOfCommits);
